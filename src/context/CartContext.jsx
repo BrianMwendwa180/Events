@@ -1,10 +1,11 @@
-import { createContext, useContext, useState } from 'react';
-
-const CartContext = createContext(null);
+import { useState } from 'react';
+import { computeTaxAmount, getConfiguredTaxRate } from '../utils/tax';
+import { CartContext } from './cartContext';
 
 export function CartProvider({ children }) {
   const [cart, setCart] = useState([]);
   const [selectedAddOns, setSelectedAddOns] = useState({});
+  const [taxRate, setTaxRate] = useState(getConfiguredTaxRate());
 
   const addToCart = (event, category, quantity) => {
     setCart(prev => {
@@ -58,18 +59,22 @@ export function CartProvider({ children }) {
   const cartSubtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const cartFees = cart.reduce((sum, i) => sum + i.fee * i.quantity, 0);
   const addOnTotal = Object.values(selectedAddOns).reduce((sum, a) => sum + a.price, 0);
-  const cartTotal = cartSubtotal + cartFees + addOnTotal;
+  const taxableAmount = cartSubtotal + cartFees + addOnTotal;
+  const cartTax = computeTaxAmount(taxableAmount, taxRate);
+  const cartTotal = taxableAmount + cartTax;
   const cartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
     <CartContext.Provider value={{
       cart, addToCart, removeFromCart, clearCart,
       selectedAddOns, toggleAddOn,
-      cartSubtotal, cartFees, addOnTotal, cartTotal, cartCount
+      taxRate, setTaxRate,
+      cartSubtotal, cartFees, addOnTotal, cartTax, cartTotal, cartCount
     }}>
       {children}
     </CartContext.Provider>
   );
 }
 
-export const useCart = () => useContext(CartContext);
+// `useCart` is exported from `src/context/useCart.js` to satisfy
+// react-refresh/only-export-components.

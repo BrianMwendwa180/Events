@@ -8,13 +8,14 @@ import EventPage from './pages/EventPage';
 import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 
-const PAYPAL_CLIENT_ID = 'AahbpbrxmSF3IfAkmqlsi_RmHh9l8LYn5xaQEG_c4SSasB8zDzBd28NkxTvaGErJJjoXtLX4L_rBjCI8';
+const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID || '';
+const CURRENCY = import.meta.env.VITE_CURRENCY || 'USD';
 
 export default function App() {
   return (
     <PayPalScriptProvider options={{
       'client-id': PAYPAL_CLIENT_ID,
-      currency: 'USD',
+      currency: CURRENCY,
       intent: 'capture',
       components: 'buttons,funding-eligibility',
       'enable-funding': 'venmo,paylater',

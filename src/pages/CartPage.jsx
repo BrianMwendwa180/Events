@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, ShoppingCart, ArrowRight, ChevronLeft, Calendar, MapPin, Clock, Ticket } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import { useCart } from '../context/useCart';
 
 export default function CartPage() {
   const navigate = useNavigate();
-  const { cart, removeFromCart, selectedAddOns, cartSubtotal, cartFees, addOnTotal, cartTotal, cartCount } = useCart();
+  const { cart, removeFromCart, selectedAddOns, cartSubtotal, cartFees, addOnTotal, cartTax, cartTotal, cartCount } = useCart();
 
   if (cartCount === 0) {
     return (
@@ -38,7 +38,7 @@ export default function CartPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Cart items */}
         <div className="lg:col-span-2 space-y-4">
-          {cart.map((item, idx) => (
+          {cart.map((item) => (
             <div key={`${item.eventId}-${item.categoryId}`} className="bg-gray-900 rounded-xl border border-gray-800 p-5">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-red-900/30 border border-red-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -145,6 +145,12 @@ export default function CartPage() {
                 <div className="flex justify-between text-sm text-gray-400">
                   <span>Add-ons</span>
                   <span className="text-white">${addOnTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {cartTax > 0 && (
+                <div className="flex justify-between text-sm text-gray-400">
+                  <span>Estimated Tax</span>
+                  <span className="text-white">${cartTax.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between text-sm text-gray-400">

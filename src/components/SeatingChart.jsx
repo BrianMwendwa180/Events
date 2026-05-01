@@ -43,13 +43,6 @@ export default function SeatingChart({ event, onSeatsChange }) {
     balconyL: '#6b7280', balconyC: '#6b7280', balconyR: '#6b7280',
   };
 
-  const sectionToCategory = {
-    floor: 'floor',
-    orchestraL: 'orchestra', orchestraC: 'orchestra', orchestraR: 'orchestra',
-    mezzL: 'mezzanine', mezzC: 'mezzanine', mezzR: 'mezzanine',
-    balconyL: 'balcony', balconyC: 'balcony', balconyR: 'balcony',
-  };
-
   const toggleSeat = (seat) => {
     if (!seat.available) return;
     let updated;

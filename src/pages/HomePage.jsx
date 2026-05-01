@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Clock, ChevronRight, Star, Ticket } from 'lucide-react';
+import { Calendar, MapPin, Clock, ChevronRight, Ticket } from 'lucide-react';
 import { events } from '../data/events';
 
 export default function HomePage() {

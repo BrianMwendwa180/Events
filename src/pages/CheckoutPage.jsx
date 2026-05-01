@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   PayPalButtons,
@@ -10,7 +10,103 @@ import {
   User, Mail, Phone, Loader, ShieldCheck, Ticket, Calendar,
   Clock, MapPin, ChevronDown, ChevronUp, X,
 } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import { useCart } from '../context/useCart';
+
+const CURRENCY = import.meta.env.VITE_CURRENCY || 'USD';
+
+function OrderSummary({
+  cart,
+  selectedAddOns,
+  cartCount,
+  cartSubtotal,
+  cartFees,
+  addOnTotal,
+  cartTax,
+  cartTotal,
+  step,
+  contactEmail,
+}) {
+  return (
+    <div className="bg-gray-900 rounded-xl border border-gray-800">
+      <div className="p-5 border-b border-gray-800 flex items-center justify-between">
+        <h2 className="text-white font-bold font-serif">Order Summary</h2>
+        <span className="text-xs text-gray-400">{cartCount} ticket{cartCount > 1 ? 's' : ''}</span>
+      </div>
+      <div className="p-5">
+        <div className="space-y-4 mb-4">
+          {cart.map(item => (
+            <div key={`${item.eventId}-${item.categoryId}`} className="flex gap-3">
+              <div className="w-8 h-8 rounded bg-red-900/30 border border-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Ticket size={14} className="text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-200 text-sm font-medium leading-tight">{item.quantity}× {item.categoryName}</span>
+                  <span className="text-white text-sm font-bold flex-shrink-0">${(item.total * item.quantity).toFixed(2)}</span>
+                </div>
+                <div className="text-xs text-gray-500 truncate">{item.eventTitle}</div>
+                <div className="flex gap-2 mt-0.5 text-xs text-gray-600 flex-wrap">
+                  <span className="flex items-center gap-0.5"><Calendar size={10} />{item.eventDate}</span>
+                  <span className="flex items-center gap-0.5"><Clock size={10} />{item.eventTime}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          {Object.values(selectedAddOns).map(addon => (
+            <div key={addon.id} className="flex justify-between items-center text-sm pl-2 border-l-2 border-yellow-700/50">
+              <span className="text-gray-400 text-xs">+ {addon.name}</span>
+              <span className="text-[#B8860B] text-xs font-semibold">${addon.price.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-gray-700 pt-3 space-y-2 text-sm">
+          <div className="flex justify-between text-gray-400">
+            <span>Tickets ({cartCount})</span>
+            <span>${cartSubtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-400">
+            <span>Service Fees</span>
+            <span>${cartFees.toFixed(2)}</span>
+          </div>
+          {addOnTotal > 0 && (
+            <div className="flex justify-between text-gray-400">
+              <span>Add-ons</span>
+              <span>${addOnTotal.toFixed(2)}</span>
+            </div>
+          )}
+          {cartTax > 0 && (
+            <div className="flex justify-between text-gray-400">
+              <span>Estimated Tax</span>
+              <span>${cartTax.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-gray-400">
+            <span>Delivery</span>
+            <span className="text-green-400">Free</span>
+          </div>
+          <div className="flex justify-between text-white font-bold text-base border-t border-gray-700 pt-2">
+            <span>Total</span>
+            <span>${cartTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {step === 2 && contactEmail && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-400 flex items-start gap-2">
+            <Mail size={13} className="text-green-400 mt-0.5 shrink-0" />
+            <span>Tickets will be sent to <span className="text-white font-medium">{contactEmail}</span></span>
+          </div>
+        )}
+        {step === 1 && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-500 flex items-center gap-2">
+            <Lock size={12} className="shrink-0" />
+            Complete contact info to proceed to payment
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ─── PayPal loading skeleton ─────────────────────────────────────── */
 function PayPalSkeleton() {
@@ -77,7 +173,7 @@ function PayPalButtonGroup({ createOrder, onApprove, onError, onCancel }) {
 export default function CheckoutPage() {
   const navigate = useNavigate();
   const {
-    cart, cartTotal, cartSubtotal, cartFees, addOnTotal,
+    cart, cartTotal, cartSubtotal, cartFees, addOnTotal, cartTax,
     selectedAddOns, cartCount, clearCart,
   } = useCart();
 
@@ -86,7 +182,7 @@ export default function CheckoutPage() {
   const [orderError, setOrderError] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);  // mobile summary toggle
-  const orderRef = useRef(`FT-${Date.now().toString(36).toUpperCase()}`);
+  const [orderRef] = useState(() => `FT-${Date.now().toString(36).toUpperCase()}`);
 
   const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [contactErrors, setContactErrors] = useState({});
@@ -102,33 +198,43 @@ export default function CheckoutPage() {
     return Object.keys(errs).length === 0;
   };
 
+  const handleContactNext = () => {
+    if (validateContact()) setStep(2);
+  };
+
   /* ── PayPal callbacks ── */
   const createOrder = useCallback((data, actions) => {
     setOrderError('');
     return actions.order.create({
       purchase_units: [{
-        reference_id: orderRef.current,
+        reference_id: orderRef,
         description: 'Fox Theatre Tickets',
         soft_descriptor: 'FOX THEATRE',
         amount: {
-          currency_code: 'USD',
+          currency_code: CURRENCY,
           value: cartTotal.toFixed(2),
           breakdown: {
             item_total: {
-              currency_code: 'USD',
+              currency_code: CURRENCY,
               value: (cartSubtotal + cartFees).toFixed(2),
             },
             ...(addOnTotal > 0 && {
               handling: {
-                currency_code: 'USD',
+                currency_code: CURRENCY,
                 value: addOnTotal.toFixed(2),
+              },
+            }),
+            ...(cartTax > 0 && {
+              tax_total: {
+                currency_code: CURRENCY,
+                value: cartTax.toFixed(2),
               },
             }),
           },
         },
         items: cart.map(item => ({
           name: `${item.eventTitle} – ${item.categoryName}`.slice(0, 127),
-          unit_amount: { currency_code: 'USD', value: item.total.toFixed(2) },
+          unit_amount: { currency_code: CURRENCY, value: item.total.toFixed(2) },
           quantity: String(item.quantity),
           category: 'DIGITAL_GOODS',
           description: `${item.eventDate} · ${item.eventTime}`.slice(0, 127),
@@ -142,7 +248,7 @@ export default function CheckoutPage() {
         cancel_url: window.location.origin + '/cart',
       },
     });
-  }, [cart, cartTotal, cartSubtotal, cartFees, addOnTotal]);
+  }, [cart, cartTotal, cartSubtotal, cartFees, addOnTotal, cartTax, orderRef]);
 
   const onApprove = useCallback(async (data, actions) => {
     setIsCapturing(true);
@@ -202,7 +308,7 @@ export default function CheckoutPage() {
           {/* Order ref */}
           <div className="bg-gray-800 rounded-xl p-4 mb-5 text-left border border-gray-700">
             <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Order Reference</div>
-            <div className="text-white font-mono font-bold text-lg tracking-widest">{orderRef.current}</div>
+            <div className="text-white font-mono font-bold text-lg tracking-widest">{orderRef}</div>
           </div>
 
           {/* Ticket summary */}
@@ -234,82 +340,6 @@ export default function CheckoutPage() {
       </div>
     );
   }
-
-  /* ── order summary subcomponent ── */
-  const OrderSummary = () => (
-    <div className="bg-gray-900 rounded-xl border border-gray-800">
-      <div className="p-5 border-b border-gray-800 flex items-center justify-between">
-        <h2 className="text-white font-bold font-serif">Order Summary</h2>
-        <span className="text-xs text-gray-400">{cartCount} ticket{cartCount > 1 ? 's' : ''}</span>
-      </div>
-      <div className="p-5">
-        <div className="space-y-4 mb-4">
-          {cart.map(item => (
-            <div key={`${item.eventId}-${item.categoryId}`} className="flex gap-3">
-              <div className="w-8 h-8 rounded bg-red-900/30 border border-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Ticket size={14} className="text-red-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between gap-2">
-                  <span className="text-gray-200 text-sm font-medium leading-tight">{item.quantity}× {item.categoryName}</span>
-                  <span className="text-white text-sm font-bold flex-shrink-0">${(item.total * item.quantity).toFixed(2)}</span>
-                </div>
-                <div className="text-xs text-gray-500 truncate">{item.eventTitle}</div>
-                <div className="flex gap-2 mt-0.5 text-xs text-gray-600 flex-wrap">
-                  <span className="flex items-center gap-0.5"><Calendar size={10} />{item.eventDate}</span>
-                  <span className="flex items-center gap-0.5"><Clock size={10} />{item.eventTime}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-          {Object.values(selectedAddOns).map(addon => (
-            <div key={addon.id} className="flex justify-between items-center text-sm pl-2 border-l-2 border-yellow-700/50">
-              <span className="text-gray-400 text-xs">+ {addon.name}</span>
-              <span className="text-[#B8860B] text-xs font-semibold">${addon.price.toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="border-t border-gray-700 pt-3 space-y-2 text-sm">
-          <div className="flex justify-between text-gray-400">
-            <span>Tickets ({cartCount})</span>
-            <span>${cartSubtotal.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between text-gray-400">
-            <span>Service Fees</span>
-            <span>${cartFees.toFixed(2)}</span>
-          </div>
-          {addOnTotal > 0 && (
-            <div className="flex justify-between text-gray-400">
-              <span>Add-ons</span>
-              <span>${addOnTotal.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-gray-400">
-            <span>Delivery</span>
-            <span className="text-green-400">Free</span>
-          </div>
-          <div className="flex justify-between text-white font-bold text-base border-t border-gray-700 pt-2">
-            <span>Total</span>
-            <span>${cartTotal.toFixed(2)}</span>
-          </div>
-        </div>
-
-        {step === 2 && contact.email && (
-          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-400 flex items-start gap-2">
-            <Mail size={13} className="text-green-400 mt-0.5 shrink-0" />
-            <span>Tickets will be sent to <span className="text-white font-medium">{contact.email}</span></span>
-          </div>
-        )}
-        {step === 1 && (
-          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-500 flex items-center gap-2">
-            <Lock size={12} className="shrink-0" />
-            Complete contact info to proceed to payment
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="min-h-screen max-w-6xl mx-auto px-4 py-6 sm:py-8">
@@ -368,7 +398,18 @@ export default function CheckoutPage() {
         </button>
         {summaryOpen && (
           <div className="border-t border-gray-800">
-            <OrderSummary />
+            <OrderSummary
+              cart={cart}
+              selectedAddOns={selectedAddOns}
+              cartCount={cartCount}
+              cartSubtotal={cartSubtotal}
+              cartFees={cartFees}
+              addOnTotal={addOnTotal}
+              cartTax={cartTax}
+              cartTotal={cartTotal}
+              step={step}
+              contactEmail={contact.email}
+            />
           </div>
         )}
       </div>
@@ -706,7 +747,18 @@ export default function CheckoutPage() {
         {/* ── Right column: Order Summary (desktop) ── */}
         <div className="hidden lg:block lg:col-span-2">
           <div className="sticky top-24">
-            <OrderSummary />
+            <OrderSummary
+              cart={cart}
+              selectedAddOns={selectedAddOns}
+              cartCount={cartCount}
+              cartSubtotal={cartSubtotal}
+              cartFees={cartFees}
+              addOnTotal={addOnTotal}
+              cartTax={cartTax}
+              cartTotal={cartTotal}
+              step={step}
+              contactEmail={contact.email}
+            />
 
             {/* Venue info */}
             <div className="mt-4 bg-gray-900 rounded-xl border border-gray-800 p-4 text-xs text-gray-500 space-y-2">

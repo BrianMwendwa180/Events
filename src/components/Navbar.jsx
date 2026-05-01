@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Menu, X, Search, Phone, User } from 'lucide-react';
 import { useState } from 'react';
-import { useCart } from '../context/CartContext';
+import { useCart } from '../context/useCart';
 
 export default function Navbar() {
   const { cartCount } = useCart();

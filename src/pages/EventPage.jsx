@@ -5,19 +5,19 @@ import {
   Ticket, ShoppingCart, Star, Share2, Heart, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { getEventById } from '../data/events';
-import { useCart } from '../context/CartContext';
+import { useCart } from '../context/useCart';
 import SeatingChart from '../components/SeatingChart';
 
 export default function EventPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const event = getEventById(id);
-  const { addToCart, toggleAddOn, selectedAddOns, cart } = useCart();
+  const { addToCart, toggleAddOn, selectedAddOns } = useCart();
 
   const [quantities, setQuantities] = useState({});
   const [selectedTab, setSelectedTab] = useState('tickets'); // 'tickets' | 'seating' | 'info'
   const [addedToast, setAddedToast] = useState(false);
-  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [, setSelectedSeats] = useState([]);
 
   if (!event) {
     return (
