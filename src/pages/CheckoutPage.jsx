@@ -1,82 +1,233 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
-import { ChevronLeft, Lock, CreditCard, CheckCircle, AlertCircle, User, Mail, Phone } from 'lucide-react';
+import {
+  PayPalButtons,
+  usePayPalScriptReducer,
+  FUNDING,
+} from '@paypal/react-paypal-js';
+import {
+  ChevronLeft, Lock, CreditCard, CheckCircle, AlertCircle,
+  User, Mail, Phone, Loader, ShieldCheck, Ticket, Calendar,
+  Clock, MapPin, ChevronDown, ChevronUp, X,
+} from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
-const PAYPAL_CLIENT_ID = 'AahbpbrxmSF3IfAkmqlsi_RmHh9l8LYn5xaQEG_c4SSasB8zDzBd28NkxTvaGErJJjoXtLX4L_rBjCI8'; // sandbox mode — replace with real client ID for production
+/* ─── PayPal loading skeleton ─────────────────────────────────────── */
+function PayPalSkeleton() {
+  return (
+    <div className="space-y-3 animate-pulse">
+      <div className="h-12 rounded-lg bg-[#0070BA]/30 border border-[#0070BA]/20" />
+      <div className="h-12 rounded-lg bg-[#1C1E24]/60 border border-gray-700" />
+      <div className="h-12 rounded-lg bg-gray-800/60 border border-gray-700" />
+    </div>
+  );
+}
 
+/* ─── PayPal button group (uses context from parent provider) ───── */
+function PayPalButtonGroup({ createOrder, onApprove, onError, onCancel }) {
+  const [{ isPending, isRejected }] = usePayPalScriptReducer();
+
+  if (isRejected) {
+    return (
+      <div className="p-4 bg-red-950/40 border border-red-800 rounded-xl flex items-center gap-3 text-red-300 text-sm">
+        <AlertCircle size={18} className="shrink-0" />
+        PayPal failed to load. Please refresh or try a different browser.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {isPending && <PayPalSkeleton />}
+
+      {/* Standard PayPal button */}
+      <PayPalButtons
+        fundingSource={FUNDING.PAYPAL}
+        style={{ layout: 'horizontal', color: 'blue', shape: 'rect', label: 'pay', tagline: false, height: 48 }}
+        createOrder={createOrder}
+        onApprove={onApprove}
+        onError={onError}
+        onCancel={onCancel}
+      />
+
+      {/* PayLater */}
+      <PayPalButtons
+        fundingSource={FUNDING.PAYLATER}
+        style={{ layout: 'horizontal', color: 'silver', shape: 'rect', label: 'paylater', tagline: false, height: 48 }}
+        createOrder={createOrder}
+        onApprove={onApprove}
+        onError={onError}
+        onCancel={onCancel}
+      />
+
+      {/* Venmo */}
+      <PayPalButtons
+        fundingSource={FUNDING.VENMO}
+        style={{ layout: 'horizontal', shape: 'rect', height: 48 }}
+        createOrder={createOrder}
+        onApprove={onApprove}
+        onError={onError}
+        onCancel={onCancel}
+      />
+    </div>
+  );
+}
+
+/* ─── Main Checkout Page ────────────────────────────────────────── */
 export default function CheckoutPage() {
   const navigate = useNavigate();
-  const { cart, cartTotal, cartSubtotal, cartFees, addOnTotal, selectedAddOns, cartCount, clearCart } = useCart();
+  const {
+    cart, cartTotal, cartSubtotal, cartFees, addOnTotal,
+    selectedAddOns, cartCount, clearCart,
+  } = useCart();
 
-  const [step, setStep] = useState(1); // 1=contact, 2=payment, 3=success
-  const [payMethod, setPayMethod] = useState('paypal'); // 'paypal' | 'card'
+  const [step, setStep] = useState(1);        // 1 contact | 2 payment | 3 success
+  const [payMethod, setPayMethod] = useState('paypal');
   const [orderError, setOrderError] = useState('');
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);  // mobile summary toggle
+  const orderRef = useRef(`FT-${Date.now().toString(36).toUpperCase()}`);
 
   const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [contactErrors, setContactErrors] = useState({});
 
+  /* ── validation ── */
   const validateContact = () => {
     const errs = {};
-    if (!contact.firstName.trim()) errs.firstName = 'Required';
-    if (!contact.lastName.trim()) errs.lastName = 'Required';
-    if (!contact.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) errs.email = 'Valid email required';
-    if (!contact.phone.match(/^\+?[\d\s\-()]{7,}$/)) errs.phone = 'Valid phone required';
+    if (!contact.firstName.trim()) errs.firstName = 'First name is required';
+    if (!contact.lastName.trim()) errs.lastName = 'Last name is required';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) errs.email = 'Enter a valid email address';
+    if (!/^\+?[\d\s\-()]{7,}$/.test(contact.phone)) errs.phone = 'Enter a valid phone number';
     setContactErrors(errs);
     return Object.keys(errs).length === 0;
   };
 
-  const handleContactNext = () => {
-    if (validateContact()) setStep(2);
-  };
+  /* ── PayPal callbacks ── */
+  const createOrder = useCallback((data, actions) => {
+    setOrderError('');
+    return actions.order.create({
+      purchase_units: [{
+        reference_id: orderRef.current,
+        description: 'Fox Theatre Tickets',
+        soft_descriptor: 'FOX THEATRE',
+        amount: {
+          currency_code: 'USD',
+          value: cartTotal.toFixed(2),
+          breakdown: {
+            item_total: {
+              currency_code: 'USD',
+              value: (cartSubtotal + cartFees).toFixed(2),
+            },
+            ...(addOnTotal > 0 && {
+              handling: {
+                currency_code: 'USD',
+                value: addOnTotal.toFixed(2),
+              },
+            }),
+          },
+        },
+        items: cart.map(item => ({
+          name: `${item.eventTitle} – ${item.categoryName}`.slice(0, 127),
+          unit_amount: { currency_code: 'USD', value: item.total.toFixed(2) },
+          quantity: String(item.quantity),
+          category: 'DIGITAL_GOODS',
+          description: `${item.eventDate} · ${item.eventTime}`.slice(0, 127),
+        })),
+      }],
+      application_context: {
+        shipping_preference: 'NO_SHIPPING',
+        user_action: 'PAY_NOW',
+        brand_name: 'Fox Theatre Atlanta',
+        return_url: window.location.origin + '/checkout',
+        cancel_url: window.location.origin + '/cart',
+      },
+    });
+  }, [cart, cartTotal, cartSubtotal, cartFees, addOnTotal]);
 
-  const handlePayPalApprove = async (data, actions) => {
+  const onApprove = useCallback(async (data, actions) => {
+    setIsCapturing(true);
+    setOrderError('');
     try {
-      await actions.order.capture();
+      const details = await actions.order.capture();
+      console.info('[PayPal] Captured:', details.id, details.status);
       clearCart();
       setStep(3);
-    } catch {
-      setOrderError('Payment could not be completed. Please try again.');
+    } catch (err) {
+      console.error('[PayPal] Capture failed:', err);
+      setOrderError('Your payment could not be completed. Please try again or use a different payment method.');
+    } finally {
+      setIsCapturing(false);
     }
-  };
+  }, [clearCart]);
 
-  const handlePayPalError = () => {
-    setOrderError('PayPal encountered an error. Please try again or use a different payment method.');
-  };
+  const onError = useCallback((err) => {
+    console.error('[PayPal] Error:', err);
+    setOrderError('PayPal encountered an error. Please refresh the page or try another payment option.');
+  }, []);
 
+  const onCancel = useCallback(() => {
+    setOrderError('Payment was cancelled. Your cart is still saved — you can try again whenever you\'re ready.');
+  }, []);
+
+  /* ── guard: empty cart ── */
   if (cartCount === 0 && step !== 3) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
-        <AlertCircle size={48} className="text-yellow-500" />
-        <h1 className="text-2xl font-bold text-white">No items in cart</h1>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center py-20">
+        <div className="w-20 h-20 rounded-full bg-gray-800 flex items-center justify-center">
+          <Ticket size={36} className="text-gray-500" />
+        </div>
+        <h1 className="text-2xl font-bold text-white font-serif">Your cart is empty</h1>
+        <p className="text-gray-400 max-w-sm">Add tickets to your cart before proceeding to checkout.</p>
         <Link to="/" className="btn-primary">Browse Events</Link>
       </div>
     );
   }
 
-  // Success screen
+  /* ── success screen ── */
   if (step === 3) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 text-center py-16">
-        <div className="bg-gray-900 rounded-2xl border border-gray-700 p-10 max-w-md w-full">
+        <div className="bg-gray-900 rounded-2xl border border-gray-700 p-8 sm:p-10 max-w-md w-full shadow-2xl">
+          {/* Animated checkmark */}
           <div className="w-20 h-20 bg-green-900/30 border-2 border-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <CheckCircle size={40} className="text-green-400" />
           </div>
           <h1 className="text-3xl font-bold text-white font-serif mb-2">Order Confirmed!</h1>
-          <p className="text-gray-400 mb-2">Thank you, {contact.firstName || 'valued guest'}!</p>
+          <p className="text-gray-300 mb-1">Thank you, <span className="text-white font-semibold">{contact.firstName || 'valued guest'}</span>!</p>
           <p className="text-gray-500 text-sm mb-6">
-            Your tickets have been sent to <span className="text-white">{contact.email || 'your email'}</span>.<br />
-            Check your inbox for your mobile ticket links.
+            Tickets sent to <span className="text-white">{contact.email || 'your email'}</span>.
+            <br />Check your inbox for mobile ticket links.
           </p>
-          <div className="bg-gray-800 rounded-xl p-4 mb-6 text-left">
-            <div className="text-xs text-gray-500 mb-1">Order Reference</div>
-            <div className="text-white font-mono font-bold text-lg">FT-{Date.now().toString(36).toUpperCase()}</div>
+
+          {/* Order ref */}
+          <div className="bg-gray-800 rounded-xl p-4 mb-5 text-left border border-gray-700">
+            <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Order Reference</div>
+            <div className="text-white font-mono font-bold text-lg tracking-widest">{orderRef.current}</div>
           </div>
+
+          {/* Ticket summary */}
+          <div className="bg-gray-800/50 rounded-xl p-4 mb-6 text-left space-y-2 border border-gray-700">
+            <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Your Tickets</div>
+            {cart.map(item => (
+              <div key={`${item.eventId}-${item.categoryId}`} className="flex justify-between text-sm">
+                <div>
+                  <div className="text-white font-medium">{item.quantity}× {item.categoryName}</div>
+                  <div className="text-xs text-gray-500">{item.eventTitle}</div>
+                  <div className="text-xs text-gray-600">{item.eventDate} · {item.eventTime}</div>
+                </div>
+                <span className="text-white font-semibold">${(item.total * item.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+            <div className="border-t border-gray-700 pt-2 flex justify-between font-bold text-white text-sm">
+              <span>Total Paid</span>
+              <span>${cartTotal.toFixed(2)}</span>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Link to="/" className="block btn-primary text-center">Browse More Events</Link>
             <button className="w-full border border-gray-700 hover:border-gray-500 text-gray-300 hover:text-white py-2.5 rounded text-sm font-semibold transition-colors">
-              Download Tickets
+              Download / Print Tickets
             </button>
           </div>
         </div>
@@ -84,331 +235,491 @@ export default function CheckoutPage() {
     );
   }
 
+  /* ── order summary subcomponent ── */
+  const OrderSummary = () => (
+    <div className="bg-gray-900 rounded-xl border border-gray-800">
+      <div className="p-5 border-b border-gray-800 flex items-center justify-between">
+        <h2 className="text-white font-bold font-serif">Order Summary</h2>
+        <span className="text-xs text-gray-400">{cartCount} ticket{cartCount > 1 ? 's' : ''}</span>
+      </div>
+      <div className="p-5">
+        <div className="space-y-4 mb-4">
+          {cart.map(item => (
+            <div key={`${item.eventId}-${item.categoryId}`} className="flex gap-3">
+              <div className="w-8 h-8 rounded bg-red-900/30 border border-red-900/50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Ticket size={14} className="text-red-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex justify-between gap-2">
+                  <span className="text-gray-200 text-sm font-medium leading-tight">{item.quantity}× {item.categoryName}</span>
+                  <span className="text-white text-sm font-bold flex-shrink-0">${(item.total * item.quantity).toFixed(2)}</span>
+                </div>
+                <div className="text-xs text-gray-500 truncate">{item.eventTitle}</div>
+                <div className="flex gap-2 mt-0.5 text-xs text-gray-600 flex-wrap">
+                  <span className="flex items-center gap-0.5"><Calendar size={10} />{item.eventDate}</span>
+                  <span className="flex items-center gap-0.5"><Clock size={10} />{item.eventTime}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          {Object.values(selectedAddOns).map(addon => (
+            <div key={addon.id} className="flex justify-between items-center text-sm pl-2 border-l-2 border-yellow-700/50">
+              <span className="text-gray-400 text-xs">+ {addon.name}</span>
+              <span className="text-[#B8860B] text-xs font-semibold">${addon.price.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="border-t border-gray-700 pt-3 space-y-2 text-sm">
+          <div className="flex justify-between text-gray-400">
+            <span>Tickets ({cartCount})</span>
+            <span>${cartSubtotal.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-gray-400">
+            <span>Service Fees</span>
+            <span>${cartFees.toFixed(2)}</span>
+          </div>
+          {addOnTotal > 0 && (
+            <div className="flex justify-between text-gray-400">
+              <span>Add-ons</span>
+              <span>${addOnTotal.toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-gray-400">
+            <span>Delivery</span>
+            <span className="text-green-400">Free</span>
+          </div>
+          <div className="flex justify-between text-white font-bold text-base border-t border-gray-700 pt-2">
+            <span>Total</span>
+            <span>${cartTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {step === 2 && contact.email && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-400 flex items-start gap-2">
+            <Mail size={13} className="text-green-400 mt-0.5 shrink-0" />
+            <span>Tickets will be sent to <span className="text-white font-medium">{contact.email}</span></span>
+          </div>
+        )}
+        {step === 1 && (
+          <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-500 flex items-center gap-2">
+            <Lock size={12} className="shrink-0" />
+            Complete contact info to proceed to payment
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen max-w-6xl mx-auto px-4 py-8">
-      {/* Header */}
+    <div className="min-h-screen max-w-6xl mx-auto px-4 py-6 sm:py-8">
+
+      {/* ── Header ── */}
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={() => step === 1 ? navigate('/cart') : setStep(1)}
-          className="text-gray-400 hover:text-white flex items-center gap-1 text-sm"
+          className="text-gray-400 hover:text-white flex items-center gap-1 text-sm transition-colors"
         >
-          <ChevronLeft size={18} /> {step === 1 ? 'Back to Cart' : 'Back'}
+          <ChevronLeft size={18} />
+          <span className="hidden sm:inline">{step === 1 ? 'Back to Cart' : 'Back'}</span>
         </button>
-        <h1 className="text-2xl font-bold text-white font-serif">Checkout</h1>
+        <h1 className="text-2xl font-bold text-white font-serif">Secure Checkout</h1>
+        <div className="ml-auto flex items-center gap-1.5 text-xs text-green-400 border border-green-900/50 bg-green-950/20 px-3 py-1 rounded-full">
+          <Lock size={11} /> SSL Secured
+        </div>
       </div>
 
-      {/* Progress */}
-      <div className="flex items-center gap-0 mb-8">
-        {['Contact Info', 'Payment', 'Confirmation'].map((label, i) => (
-          <div key={label} className="flex items-center">
-            <div className={`flex items-center gap-2 text-sm font-semibold ${
+      {/* ── Progress bar ── */}
+      <div className="flex items-center mb-8">
+        {['Contact', 'Payment', 'Done'].map((label, i) => (
+          <div key={label} className="flex items-center flex-1 last:flex-none">
+            <div className={`flex items-center gap-2 text-sm font-semibold shrink-0 ${
               step > i + 1 ? 'text-green-400' : step === i + 1 ? 'text-white' : 'text-gray-600'
             }`}>
-              <div className={`w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold ${
+              <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all ${
                 step > i + 1
                   ? 'bg-green-600 border-green-600 text-white'
                   : step === i + 1
-                  ? 'bg-red-700 border-red-700 text-white'
+                  ? 'bg-red-700 border-red-700 text-white shadow-lg shadow-red-900/40'
                   : 'border-gray-700 text-gray-600'
               }`}>
                 {step > i + 1 ? '✓' : i + 1}
               </div>
               <span className="hidden sm:inline">{label}</span>
             </div>
-            {i < 2 && <div className={`w-12 h-0.5 mx-2 ${step > i + 1 ? 'bg-green-600' : 'bg-gray-700'}`} />}
+            {i < 2 && (
+              <div className={`flex-1 h-0.5 mx-3 transition-colors ${step > i + 1 ? 'bg-green-600' : 'bg-gray-700'}`} />
+            )}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main form */}
-        <div className="lg:col-span-2">
-          {/* Step 1: Contact Info */}
+      {/* ── Mobile Order Summary Accordion ── */}
+      <div className="lg:hidden mb-5 bg-gray-900 rounded-xl border border-gray-800">
+        <button
+          onClick={() => setSummaryOpen(o => !o)}
+          className="w-full flex items-center justify-between p-4 text-sm"
+        >
+          <span className="flex items-center gap-2 text-white font-semibold">
+            <Ticket size={15} className="text-red-500" />
+            Order Summary — <span className="text-[#B8860B]">${cartTotal.toFixed(2)}</span>
+          </span>
+          {summaryOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+        </button>
+        {summaryOpen && (
+          <div className="border-t border-gray-800">
+            <OrderSummary />
+          </div>
+        )}
+      </div>
+
+      {/* ── Main grid ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+
+        {/* ── Left column ── */}
+        <div className="lg:col-span-3 space-y-5">
+
+          {/* STEP 1: Contact */}
           {step === 1 && (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-              <h2 className="text-white font-bold text-lg mb-5 flex items-center gap-2 font-serif">
-                <User size={20} className="text-red-500" /> Contact Information
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                {[
-                  { key: 'firstName', label: 'First Name', placeholder: 'John', type: 'text' },
-                  { key: 'lastName', label: 'Last Name', placeholder: 'Smith', type: 'text' },
-                ].map(field => (
-                  <div key={field.key}>
-                    <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">{field.label}</label>
-                    <input
-                      type={field.type}
-                      placeholder={field.placeholder}
-                      value={contact[field.key]}
-                      onChange={e => setContact(prev => ({ ...prev, [field.key]: e.target.value }))}
-                      className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600 ${
-                        contactErrors[field.key] ? 'border-red-600' : 'border-gray-700'
-                      }`}
-                    />
-                    {contactErrors[field.key] && (
-                      <p className="text-red-400 text-xs mt-1">{contactErrors[field.key]}</p>
-                    )}
-                  </div>
-                ))}
+            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/80">
+                <h2 className="text-white font-bold text-base flex items-center gap-2 font-serif">
+                  <User size={18} className="text-red-500" /> Contact Information
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">Tickets will be delivered to this email address</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <div className="p-6 space-y-4">
+                {/* Name row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { key: 'firstName', label: 'First Name', placeholder: 'John' },
+                    { key: 'lastName', label: 'Last Name', placeholder: 'Smith' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">{f.label}</label>
+                      <input
+                        type="text"
+                        placeholder={f.placeholder}
+                        value={contact[f.key]}
+                        onChange={e => {
+                          setContact(p => ({ ...p, [f.key]: e.target.value }));
+                          if (contactErrors[f.key]) setContactErrors(p => ({ ...p, [f.key]: '' }));
+                        }}
+                        className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all ${
+                          contactErrors[f.key] ? 'border-red-500 bg-red-950/10' : 'border-gray-700 hover:border-gray-600'
+                        }`}
+                      />
+                      {contactErrors[f.key] && (
+                        <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                          <AlertCircle size={11} /> {contactErrors[f.key]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Email */}
                 <div>
-                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">Email Address</label>
+                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Email Address</label>
                   <div className="relative">
-                    <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                     <input
                       type="email"
                       placeholder="john@example.com"
                       value={contact.email}
-                      onChange={e => setContact(prev => ({ ...prev, email: e.target.value }))}
-                      className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600 ${
-                        contactErrors.email ? 'border-red-600' : 'border-gray-700'
+                      onChange={e => {
+                        setContact(p => ({ ...p, email: e.target.value }));
+                        if (contactErrors.email) setContactErrors(p => ({ ...p, email: '' }));
+                      }}
+                      className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg pl-9 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all ${
+                        contactErrors.email ? 'border-red-500 bg-red-950/10' : 'border-gray-700 hover:border-gray-600'
                       }`}
                     />
                   </div>
-                  {contactErrors.email && <p className="text-red-400 text-xs mt-1">{contactErrors.email}</p>}
+                  {contactErrors.email && (
+                    <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle size={11} /> {contactErrors.email}
+                    </p>
+                  )}
                 </div>
+
+                {/* Phone */}
                 <div>
-                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">Phone Number</label>
+                  <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Phone Number</label>
                   <div className="relative">
-                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                     <input
                       type="tel"
                       placeholder="+1 (555) 000-0000"
                       value={contact.phone}
-                      onChange={e => setContact(prev => ({ ...prev, phone: e.target.value }))}
-                      className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg pl-9 pr-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600 ${
-                        contactErrors.phone ? 'border-red-600' : 'border-gray-700'
+                      onChange={e => {
+                        setContact(p => ({ ...p, phone: e.target.value }));
+                        if (contactErrors.phone) setContactErrors(p => ({ ...p, phone: '' }));
+                      }}
+                      className={`w-full bg-gray-800 border text-white placeholder-gray-600 text-sm rounded-lg pl-9 pr-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all ${
+                        contactErrors.phone ? 'border-red-500 bg-red-950/10' : 'border-gray-700 hover:border-gray-600'
                       }`}
                     />
                   </div>
-                  {contactErrors.phone && <p className="text-red-400 text-xs mt-1">{contactErrors.phone}</p>}
+                  {contactErrors.phone && (
+                    <p className="text-red-400 text-xs mt-1 flex items-center gap-1">
+                      <AlertCircle size={11} /> {contactErrors.phone}
+                    </p>
+                  )}
                 </div>
+
+                {/* Delivery info */}
+                <div className="flex items-start gap-3 p-3.5 bg-blue-950/20 border border-blue-900/30 rounded-xl">
+                  <ShieldCheck size={15} className="text-blue-400 mt-0.5 shrink-0" />
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    Your information is encrypted and protected. Mobile tickets will be emailed immediately after payment confirmation.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleContactNext}
+                  className="w-full btn-primary py-3.5 text-base"
+                >
+                  Continue to Payment →
+                </button>
               </div>
-              <div className="flex items-start gap-2 mb-6 p-3 bg-blue-950/30 border border-blue-900/40 rounded-lg">
-                <Lock size={14} className="text-blue-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-gray-400">
-                  Your personal information is encrypted and protected. Tickets will be emailed to the address provided.
-                </p>
-              </div>
-              <button onClick={handleContactNext} className="w-full btn-primary">
-                Continue to Payment
-              </button>
             </div>
           )}
 
-          {/* Step 2: Payment */}
+          {/* STEP 2: Payment */}
           {step === 2 && (
-            <div className="space-y-4">
-              {/* Payment method selector */}
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
-                <h2 className="text-white font-bold text-lg mb-5 flex items-center gap-2 font-serif">
-                  <CreditCard size={20} className="text-red-500" /> Payment Method
-                </h2>
-                <div className="flex gap-3 mb-6">
-                  <button
-                    onClick={() => setPayMethod('paypal')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 transition-all ${
-                      payMethod === 'paypal'
-                        ? 'border-[#0070BA] bg-blue-950/30'
-                        : 'border-gray-700 hover:border-gray-500'
-                    }`}
-                  >
-                    <img
-                      src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/124px-PayPal.svg.png"
-                      alt="PayPal"
-                      className="h-5"
-                    />
-                    <span className="text-white text-sm font-semibold">PayPal</span>
-                  </button>
-                  <button
-                    onClick={() => setPayMethod('card')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg border-2 transition-all ${
-                      payMethod === 'card'
-                        ? 'border-red-600 bg-red-950/20'
-                        : 'border-gray-700 hover:border-gray-500'
-                    }`}
-                  >
-                    <CreditCard size={18} className="text-gray-400" />
-                    <span className="text-white text-sm font-semibold">Credit / Debit Card</span>
-                  </button>
+            <>
+              {/* Contact summary */}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 px-5 py-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Paying as</div>
+                  <div className="text-white font-semibold text-sm">{contact.firstName} {contact.lastName}</div>
+                  <div className="text-gray-400 text-xs">{contact.email}</div>
                 </div>
+                <button
+                  onClick={() => setStep(1)}
+                  className="text-xs text-red-400 hover:text-red-300 border border-red-900/40 hover:border-red-700/50 px-3 py-1.5 rounded transition-colors"
+                >
+                  Edit
+                </button>
+              </div>
 
-                {/* PayPal Buttons */}
-                {payMethod === 'paypal' && (
-                  <div>
-                    <p className="text-gray-400 text-sm mb-4 text-center">
-                      You'll be redirected to PayPal to complete your purchase securely.
-                    </p>
-                    <PayPalScriptProvider options={{
-                      'client-id': PAYPAL_CLIENT_ID,
-                      currency: 'USD',
-                      intent: 'capture',
-                    }}>
-                      <PayPalButtons
-                        style={{ layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' }}
-                        createOrder={(data, actions) => {
-                          return actions.order.create({
-                            purchase_units: [{
-                              description: `Fox Theatre Tickets`,
-                              amount: {
-                                currency_code: 'USD',
-                                value: cartTotal.toFixed(2),
-                                breakdown: {
-                                  item_total: { currency_code: 'USD', value: (cartSubtotal + cartFees).toFixed(2) },
-                                  handling: { currency_code: 'USD', value: addOnTotal.toFixed(2) },
-                                }
-                              },
-                              items: cart.map(item => ({
-                                name: `${item.eventTitle} - ${item.categoryName}`,
-                                unit_amount: { currency_code: 'USD', value: item.total.toFixed(2) },
-                                quantity: String(item.quantity),
-                                category: 'DIGITAL_GOODS',
-                              })),
-                            }],
-                            application_context: {
-                              shipping_preference: 'NO_SHIPPING',
-                              user_action: 'PAY_NOW',
-                              brand_name: 'Fox Theatre Atlanta',
-                            }
-                          });
-                        }}
-                        onApprove={handlePayPalApprove}
-                        onError={handlePayPalError}
-                        onCancel={() => setOrderError('Payment was cancelled. Your cart is still saved.')}
-                      />
-                    </PayPalScriptProvider>
-                    {orderError && (
-                      <div className="mt-3 p-3 bg-red-950/30 border border-red-800 rounded-lg flex items-center gap-2 text-sm text-red-300">
-                        <AlertCircle size={16} /> {orderError}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Card form (UI only — wire up to real processor in production) */}
-                {payMethod === 'card' && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">Card Number</label>
-                      <input
-                        type="text"
-                        placeholder="1234 5678 9012 3456"
-                        maxLength={19}
-                        className="w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">Expiry</label>
-                        <input
-                          type="text"
-                          placeholder="MM / YY"
-                          maxLength={7}
-                          className="w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">CVV</label>
-                        <input
-                          type="text"
-                          placeholder="123"
-                          maxLength={4}
-                          className="w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1">Cardholder Name</label>
-                      <input
-                        type="text"
-                        placeholder="John Smith"
-                        className="w-full bg-gray-800 border border-gray-700 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-red-600"
-                      />
-                    </div>
+              {/* Payment method */}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-800">
+                  <h2 className="text-white font-bold text-base flex items-center gap-2 font-serif">
+                    <CreditCard size={18} className="text-red-500" /> Payment Method
+                  </h2>
+                </div>
+                <div className="p-6">
+                  {/* Tab selector */}
+                  <div className="grid grid-cols-2 gap-3 mb-6">
                     <button
-                      onClick={() => { clearCart(); setStep(3); }}
-                      className="w-full btn-primary"
+                      onClick={() => { setPayMethod('paypal'); setOrderError(''); }}
+                      className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border-2 transition-all duration-150 ${
+                        payMethod === 'paypal'
+                          ? 'border-[#0070BA] bg-blue-950/30 shadow-lg shadow-blue-950/30'
+                          : 'border-gray-700 hover:border-gray-600 bg-gray-800/30'
+                      }`}
                     >
-                      Pay ${cartTotal.toFixed(2)}
+                      <img
+                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/124px-PayPal.svg.png"
+                        alt="PayPal"
+                        className="h-5"
+                      />
+                      <span className={`text-sm font-semibold ${payMethod === 'paypal' ? 'text-white' : 'text-gray-400'}`}>
+                        PayPal
+                      </span>
                     </button>
-                    <p className="text-xs text-gray-500 text-center">
-                      Card payments powered by Stripe (demo mode)
-                    </p>
+                    <button
+                      onClick={() => { setPayMethod('card'); setOrderError(''); }}
+                      className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border-2 transition-all duration-150 ${
+                        payMethod === 'card'
+                          ? 'border-red-600 bg-red-950/20 shadow-lg shadow-red-950/30'
+                          : 'border-gray-700 hover:border-gray-600 bg-gray-800/30'
+                      }`}
+                    >
+                      <CreditCard size={18} className={payMethod === 'card' ? 'text-red-400' : 'text-gray-500'} />
+                      <span className={`text-sm font-semibold ${payMethod === 'card' ? 'text-white' : 'text-gray-400'}`}>
+                        Card
+                      </span>
+                    </button>
                   </div>
-                )}
+
+                  {/* ── PayPal panel ── */}
+                  {payMethod === 'paypal' && (
+                    <div>
+                      {/* Amount badge */}
+                      <div className="flex items-center justify-between mb-4 p-3 bg-gray-800 rounded-lg">
+                        <span className="text-gray-400 text-sm">Amount due</span>
+                        <span className="text-white font-bold text-lg">${cartTotal.toFixed(2)}</span>
+                      </div>
+
+                      <p className="text-gray-400 text-sm mb-4 text-center leading-relaxed">
+                        Choose your preferred PayPal payment option below.
+                        You'll review your order before payment is charged.
+                      </p>
+
+                      {/* Loading overlay when capturing */}
+                      {isCapturing ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-10">
+                          <Loader size={36} className="text-[#0070BA] animate-spin" />
+                          <p className="text-gray-300 text-sm font-semibold">Processing your payment…</p>
+                          <p className="text-gray-500 text-xs">Please do not close this page</p>
+                        </div>
+                      ) : (
+                        <PayPalButtonGroup
+                          createOrder={createOrder}
+                          onApprove={onApprove}
+                          onError={onError}
+                          onCancel={onCancel}
+                        />
+                      )}
+
+                      {/* Error message */}
+                      {orderError && (
+                        <div className="mt-4 p-3.5 bg-red-950/30 border border-red-800 rounded-xl flex items-start gap-2.5 text-sm text-red-300">
+                          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                          <span className="flex-1">{orderError}</span>
+                          <button onClick={() => setOrderError('')} className="text-red-500 hover:text-red-300 shrink-0">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* PayPal protections note */}
+                      <div className="mt-5 flex items-center justify-center gap-2 text-xs text-gray-500">
+                        <img
+                          src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/80px-PayPal.svg.png"
+                          alt=""
+                          className="h-3 opacity-50"
+                        />
+                        <span>Buyer Protection included with every PayPal transaction</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Card panel ── */}
+                  {payMethod === 'card' && (
+                    <div className="space-y-4">
+                      {/* Amount badge */}
+                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <span className="text-gray-400 text-sm">Amount due</span>
+                        <span className="text-white font-bold text-lg">${cartTotal.toFixed(2)}</span>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Card Number</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="1234  5678  9012  3456"
+                            maxLength={19}
+                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 pr-16 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
+                          />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
+                            {['V', 'M', 'A'].map(c => (
+                              <span key={c} className="text-[10px] font-bold w-5 h-4 flex items-center justify-center bg-gray-700 rounded text-gray-400">{c}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Expiry Date</label>
+                          <input
+                            type="text"
+                            placeholder="MM / YY"
+                            maxLength={7}
+                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">CVV / CVC</label>
+                          <input
+                            type="text"
+                            placeholder="•••"
+                            maxLength={4}
+                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Name on Card</label>
+                        <input
+                          type="text"
+                          placeholder={`${contact.firstName} ${contact.lastName}`.trim() || 'John Smith'}
+                          className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
+                        />
+                      </div>
+
+                      {orderError && (
+                        <div className="p-3.5 bg-red-950/30 border border-red-800 rounded-xl flex items-start gap-2.5 text-sm text-red-300">
+                          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                          <span className="flex-1">{orderError}</span>
+                          <button onClick={() => setOrderError('')}><X size={14} className="text-red-500" /></button>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => { clearCart(); setStep(3); }}
+                        className="w-full btn-primary py-3.5 text-base flex items-center justify-center gap-2"
+                      >
+                        <Lock size={15} />
+                        Pay ${cartTotal.toFixed(2)} Securely
+                      </button>
+                      <p className="text-xs text-gray-600 text-center">
+                        Card payments processed securely. Demo mode — no real charge.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Security badges */}
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4 flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5"><Lock size={13} className="text-green-400" />256-bit SSL encryption</span>
-                <span className="flex items-center gap-1.5">
-                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/80px-PayPal.svg.png" alt="" className="h-4" />
-                  PayPal Buyer Protection
-                </span>
-                <span className="flex items-center gap-1.5">🛡️ Secure Checkout</span>
+              {/* Trust badges */}
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5">
+                    <Lock size={12} className="text-green-400" />
+                    256-bit SSL Encryption
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck size={12} className="text-blue-400" />
+                    PayPal Buyer Protection
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle size={12} className="text-yellow-500" />
+                    Instant Ticket Delivery
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Ticket size={12} className="text-red-400" />
+                    Official Fox Theatre Tickets
+                  </span>
+                </div>
               </div>
-            </div>
+            </>
           )}
         </div>
 
-        {/* Order Summary */}
-        <div className="lg:col-span-1">
-          <div className="bg-gray-900 rounded-xl border border-gray-800 sticky top-24">
-            <div className="p-5 border-b border-gray-800">
-              <h2 className="text-white font-bold font-serif">Order Summary</h2>
-            </div>
-            <div className="p-5">
-              {/* Items */}
-              <div className="space-y-3 mb-4">
-                {cart.map(item => (
-                  <div key={`${item.eventId}-${item.categoryId}`} className="text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-300 leading-tight">
-                        {item.quantity}× {item.categoryName}
-                      </span>
-                      <span className="text-white flex-shrink-0 ml-2">${(item.total * item.quantity).toFixed(2)}</span>
-                    </div>
-                    <div className="text-xs text-gray-500 leading-tight">{item.eventTitle}</div>
-                    <div className="text-xs text-gray-600">{item.eventDate} · {item.eventTime}</div>
-                  </div>
-                ))}
-                {Object.values(selectedAddOns).map(addon => (
-                  <div key={addon.id} className="flex justify-between text-sm">
-                    <span className="text-gray-400 text-xs">+ {addon.name}</span>
-                    <span className="text-[#B8860B] text-xs">${addon.price.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
+        {/* ── Right column: Order Summary (desktop) ── */}
+        <div className="hidden lg:block lg:col-span-2">
+          <div className="sticky top-24">
+            <OrderSummary />
 
-              <div className="border-t border-gray-700 pt-3 space-y-1.5 text-sm">
-                <div className="flex justify-between text-gray-400">
-                  <span>Subtotal</span><span>${cartSubtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-400">
-                  <span>Service Fees</span><span>${cartFees.toFixed(2)}</span>
-                </div>
-                {addOnTotal > 0 && (
-                  <div className="flex justify-between text-gray-400">
-                    <span>Add-ons</span><span>${addOnTotal.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-white font-bold text-base border-t border-gray-700 pt-2 mt-1">
-                  <span>Total</span><span>${cartTotal.toFixed(2)}</span>
+            {/* Venue info */}
+            <div className="mt-4 bg-gray-900 rounded-xl border border-gray-800 p-4 text-xs text-gray-500 space-y-2">
+              <div className="flex items-start gap-2">
+                <MapPin size={13} className="text-red-500 mt-0.5 shrink-0" />
+                <div>
+                  <div className="text-gray-300 font-semibold">Fox Theatre Atlanta</div>
+                  <div>660 Peachtree St NE, Atlanta, GA 30308</div>
                 </div>
               </div>
-
-              {step === 1 && (
-                <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-500">
-                  Complete contact info to proceed to payment
-                </div>
-              )}
-              {step === 2 && contact.email && (
-                <div className="mt-4 p-3 bg-gray-800 rounded-lg text-xs text-gray-400">
-                  Tickets will be sent to:<br />
-                  <span className="text-white font-medium">{contact.email}</span>
-                </div>
-              )}
+              <p className="text-gray-600 border-t border-gray-800 pt-2">
+                All sales are final. No refunds or exchanges except in the event of show cancellation.
+              </p>
             </div>
           </div>
         </div>
