@@ -69,59 +69,71 @@ export default function EventPage() {
   return (
     <div className="min-h-screen">
       {/* Hero */}
-      <div className="relative h-64 md:h-80 overflow-hidden">
+      <div className="relative h-48 sm:h-64 md:h-80 lg:h-96 overflow-hidden">
         <img src={event.image} alt={event.title} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 max-w-7xl mx-auto px-4 pb-6">
-          <div className="flex items-center gap-2 text-xs text-gray-400 mb-2">
-            <Link to="/" className="hover:text-white">Home</Link>
-            <ChevronRight size={12} />
-            <Link to="/" className="hover:text-white">Events</Link>
-            <ChevronRight size={12} />
-            <span className="text-gray-200">{event.title}</span>
+        <div className="absolute bottom-0 left-0 right-0 max-w-7xl mx-auto px-3 sm:px-4 pb-4 sm:pb-6 w-full">
+          <div className="flex items-center gap-2 text-xs text-gray-400 mb-2 overflow-x-auto">
+            <Link to="/" className="hover:text-white flex-shrink-0">Home</Link>
+            <ChevronRight size={12} className="flex-shrink-0" />
+            <Link to="/" className="hover:text-white flex-shrink-0">Events</Link>
+            <ChevronRight size={12} className="flex-shrink-0" />
+            <span className="text-gray-200 truncate">{event.title}</span>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-            <div>
-              <span className="text-xs bg-red-700 text-white px-2 py-0.5 rounded uppercase tracking-wider font-semibold">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-3">
+            <div className="flex-1 min-w-0">
+              <span className="text-xs bg-red-700 text-white px-2 py-0.5 rounded uppercase tracking-wider font-semibold inline-block">
                 {event.category}
               </span>
-              <h1 className="text-2xl md:text-4xl font-bold text-white font-serif mt-2 leading-tight">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white font-serif mt-2 leading-tight break-words">
                 {event.title}
               </h1>
-              <p className="text-[#B8860B] text-sm mt-1">{event.subtitle}</p>
+              <p className="text-[#B8860B] text-xs sm:text-sm mt-1">{event.subtitle}</p>
             </div>
             <div className="flex gap-2">
-              <button className="p-2 bg-white/10 hover:bg-white/20 rounded text-white transition-colors">
-                <Share2 size={16} />
-              </button>
-              <button className="p-2 bg-white/10 hover:bg-white/20 rounded text-white transition-colors">
-                <Heart size={16} />
-              </button>
+              <div className="flex gap-1 sm:gap-2">
+                <button className="p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 rounded text-white transition-colors flex-shrink-0">
+                  <Share2 size={16} />
+                </button>
+                <button className="p-1.5 sm:p-2 bg-white/10 hover:bg-white/20 rounded text-white transition-colors flex-shrink-0">
+                  <Heart size={16} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </div> {/* ← FIX: closes .relative.h-48 hero wrapper */}
 
       {/* Quick info bar */}
       <div className="bg-[#111] border-b border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-4 text-sm text-gray-300">
-          <span className="flex items-center gap-1.5"><Calendar size={14} className="text-red-500" />{event.date}</span>
-          <span className="flex items-center gap-1.5"><Clock size={14} className="text-red-500" />Doors {event.doorsOpen} · Show {event.time}</span>
-          <span className="flex items-center gap-1.5"><MapPin size={14} className="text-red-500" />{event.venue}, {event.city}</span>
-          <span className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-700 px-2 py-0.5 rounded">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm text-gray-300">
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <Calendar size={14} className="text-red-500" />
+            <span className="hidden sm:inline">{event.date}</span>
+          </span>
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <Clock size={14} className="text-red-500" />
+            <span className="hidden sm:inline">Doors {event.doorsOpen} · Show {event.time}</span>
+            <span className="sm:hidden">{event.time}</span>
+          </span>
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <MapPin size={14} className="text-red-500" />
+            {event.venue}
+          </span>
+          <span className="flex items-center gap-1 text-xs text-gray-500 border border-gray-700 px-2 py-0.5 rounded flex-shrink-0">
             {event.ageRestriction}
           </span>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
 
           {/* Left: tabs + content */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 order-1 lg:order-none">
             {/* Tabs */}
-            <div className="flex gap-0 border-b border-gray-800 mb-6">
+            <div className="flex gap-0 border-b border-gray-800 mb-4 sm:mb-6 overflow-x-auto">
               {[
                 { key: 'tickets', label: 'Select Tickets' },
                 { key: 'seating', label: 'Seating Chart' },
@@ -130,7 +142,7 @@ export default function EventPage() {
                 <button
                   key={tab.key}
                   onClick={() => setSelectedTab(tab.key)}
-                  className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
+                  className={`px-3 sm:px-5 py-2 sm:py-3 text-xs sm:text-sm font-semibold border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                     selectedTab === tab.key
                       ? 'border-red-600 text-white'
                       : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -144,36 +156,36 @@ export default function EventPage() {
             {/* Ticket Selection Tab */}
             {selectedTab === 'tickets' && (
               <div className="space-y-3">
-                <p className="text-sm text-gray-400 mb-4">
+                <p className="text-xs sm:text-sm text-gray-400 mb-4">
                   Select ticket quantities below (max 8 tickets per order). Fees are included in the total.
                 </p>
                 {event.ticketCategories.map(cat => (
-                  <div key={cat.id} className="bg-gray-900 rounded-xl p-4 border border-gray-800 hover:border-gray-600 transition-colors">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                      <div className="flex items-center gap-3">
+                  <div key={cat.id} className="bg-gray-900 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-800 hover:border-gray-600 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="w-4 h-4 rounded-sm flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                        <div>
-                          <div className="text-white font-bold">{cat.name}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-white font-bold text-sm sm:text-base">{cat.name}</div>
                           <div className="text-xs text-gray-400">
                             ${cat.price.toFixed(2)} + ${cat.fee.toFixed(2)} fee
                             <span className="ml-2 text-green-400">{cat.available} available</span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 sm:gap-4 justify-between w-full sm:w-auto">
                         <div className="text-right">
-                          <div className="text-white font-bold">${cat.total.toFixed(2)}</div>
+                          <div className="text-white font-bold text-sm sm:text-base">${cat.total.toFixed(2)}</div>
                           <div className="text-xs text-gray-500">per ticket</div>
                         </div>
-                        <div className="flex items-center gap-2 bg-gray-800 rounded-lg">
+                        <div className="flex items-center gap-1 sm:gap-2 bg-gray-800 rounded-lg">
                           <button
                             onClick={() => updateQty(cat.id, -1)}
-                            className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-700 rounded-l-lg transition-colors disabled:opacity-30"
+                            className="w-7 sm:w-8 h-7 sm:h-8 flex items-center justify-center text-gray-300 hover:text-white hover:bg-gray-700 rounded-l-lg transition-colors disabled:opacity-30"
                             disabled={!quantities[cat.id]}
                           >
                             <Minus size={14} />
                           </button>
-                          <span className="w-8 text-center text-white font-bold text-sm">
+                          <span className="w-6 sm:w-8 text-center text-white font-bold text-sm">
                             {quantities[cat.id] || 0}
                           </span>
                           <button
@@ -191,9 +203,9 @@ export default function EventPage() {
 
                 {/* Add-ons */}
                 {event.addOns?.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                      <Star size={16} className="text-[#B8860B]" />
+                  <div className="mt-5 sm:mt-6">
+                    <h3 className="text-white font-semibold mb-2 sm:mb-3 flex items-center gap-2 text-sm sm:text-base">
+                      <Star size={16} className="text-[#B8860B] flex-shrink-0" />
                       Enhance Your Experience
                     </h3>
                     <div className="space-y-2">
@@ -201,24 +213,24 @@ export default function EventPage() {
                         <div
                           key={addon.id}
                           onClick={() => toggleAddOn(event.id, addon)}
-                          className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                          className={`flex items-center justify-between p-2 sm:p-3 rounded-lg border cursor-pointer transition-all ${
                             isAddOnSelected(addon.id)
                               ? 'border-[#B8860B] bg-yellow-950/30'
                               : 'border-gray-700 bg-gray-900 hover:border-gray-500'
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
                             <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                               isAddOnSelected(addon.id) ? 'border-[#B8860B] bg-[#B8860B]' : 'border-gray-600'
                             }`}>
                               {isAddOnSelected(addon.id) && <CheckCircle size={12} className="text-white" />}
                             </div>
-                            <div>
-                              <div className="text-white text-sm font-semibold">{addon.name}</div>
-                              <div className="text-xs text-gray-400">{addon.description}</div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-white text-xs sm:text-sm font-semibold">{addon.name}</div>
+                              <div className="text-xs text-gray-400 line-clamp-1">{addon.description}</div>
                             </div>
                           </div>
-                          <div className="text-white font-bold text-sm ml-4 flex-shrink-0">
+                          <div className="text-white font-bold text-xs sm:text-sm ml-2 flex-shrink-0">
                             +${addon.price.toFixed(2)}
                           </div>
                         </div>
@@ -282,18 +294,18 @@ export default function EventPage() {
           </div>
 
           {/* Right: Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-gray-900 rounded-xl border border-gray-800 sticky top-24">
-              <div className="p-5 border-b border-gray-800">
-                <h2 className="text-white font-bold text-lg font-serif">Order Summary</h2>
+          <div className="lg:col-span-1 order-2 lg:order-none">
+            <div className="bg-gray-900 rounded-lg sm:rounded-xl border border-gray-800 lg:sticky lg:top-24">
+              <div className="p-4 sm:p-5 border-b border-gray-800">
+                <h2 className="text-white font-bold text-base sm:text-lg font-serif">Order Summary</h2>
                 <p className="text-xs text-gray-400 mt-1">{event.date} · {event.time}</p>
               </div>
 
-              <div className="p-5">
+              <div className="p-4 sm:p-5">
                 {totalTickets === 0 && Object.keys(selectedAddOns).filter(k => k.startsWith(event.id)).length === 0 ? (
-                  <div className="text-center py-6">
+                  <div className="text-center py-4 sm:py-6">
                     <Ticket size={32} className="text-gray-600 mx-auto mb-2" />
-                    <p className="text-gray-500 text-sm">No tickets selected yet</p>
+                    <p className="text-gray-500 text-xs sm:text-sm">No tickets selected yet</p>
                     <p className="text-gray-600 text-xs mt-1">Choose ticket categories above</p>
                   </div>
                 ) : (
@@ -328,40 +340,53 @@ export default function EventPage() {
                       {Object.values(selectedAddOns).filter(a => a.eventId === event.id).length > 0 && (
                         <div className="flex justify-between text-sm text-gray-400">
                           <span>Add-ons</span>
-                          <span>${Object.values(selectedAddOns).filter(a => a.eventId === event.id).reduce((s, a) => s + a.price, 0).toFixed(2)}</span>
+                          <span>
+                            ${Object.values(selectedAddOns)
+                              .filter(a => a.eventId === event.id)
+                              .reduce((s, a) => s + a.price, 0)
+                              .toFixed(2)}
+                          </span>
                         </div>
                       )}
                       <div className="flex justify-between text-white font-bold text-base border-t border-gray-700 pt-2 mt-2">
                         <span>Total</span>
-                        <span>${(subtotal + fees + Object.values(selectedAddOns).filter(a => a.eventId === event.id).reduce((s, a) => s + a.price, 0)).toFixed(2)}</span>
+                        <span>
+                          ${(
+                            subtotal +
+                            fees +
+                            Object.values(selectedAddOns)
+                              .filter(a => a.eventId === event.id)
+                              .reduce((s, a) => s + a.price, 0)
+                          ).toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>
                 )}
 
                 {/* Action buttons */}
-                <div className="mt-5 space-y-2">
+                <div className="mt-4 sm:mt-5 space-y-2">
                   <button
                     onClick={handleBuyNow}
                     disabled={totalTickets === 0}
-                    className="w-full btn-primary disabled:opacity-40 disabled:cursor-not-allowed text-center"
+                    className="w-full btn-primary disabled:opacity-40 disabled:cursor-not-allowed text-center text-sm sm:text-base py-2.5 sm:py-3"
                   >
                     Checkout Now
                   </button>
                   <button
                     onClick={handleAddToCart}
                     disabled={totalTickets === 0}
-                    className="w-full flex items-center justify-center gap-2 border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 py-2.5 px-4 rounded text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 py-2 sm:py-2.5 px-3 sm:px-4 rounded text-xs sm:text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <ShoppingCart size={15} />
+                    <ShoppingCart size={16} />
                     Add to Cart
                   </button>
                 </div>
 
                 {/* Security */}
-                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
+                <div className="mt-3 sm:mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
                   <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
+                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                   </svg>
                   Secure checkout · SSL encrypted
                 </div>
@@ -375,6 +400,7 @@ export default function EventPage() {
               </div>
             </div>
           </div>
+
         </div>
       </div>
 

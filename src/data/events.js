@@ -1,3 +1,5 @@
+import mothersDayImg from '../assets/mothersDay.png';
+
 export const events = [
   {
     id: "MDL",
@@ -9,8 +11,8 @@ export const events = [
     venue: "Fox Theatre",
     city: "Atlanta, GA",
     address: "660 Peachtree St NE, Atlanta, GA 30308",
-    image: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&auto=format&fit=crop",
-    thumbImage: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&auto=format&fit=crop",
+    image: mothersDayImg,
+    thumbImage: mothersDayImg,
     category: "Concert",
     genre: "R&B / Soul",
     description: "Join Xscape for an unforgettable Mother's Day Love Affair concert at the historic Fox Theatre. This special evening celebrates mothers everywhere with the iconic R&B group's greatest hits and brand new material. A night of soul, harmony, and love you won't want to miss.",

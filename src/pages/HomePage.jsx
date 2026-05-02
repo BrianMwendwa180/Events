@@ -5,18 +5,18 @@ import { events } from '../data/events';
 export default function HomePage() {
   const featured = events[0];
   const rest = events.slice(1);
+  
+  // Using new URL() for proper Vite asset resolution
+  const mothersDayBg = new URL('../assets/mothersDay.png', import.meta.url).href;
 
   return (
     <div className="min-h-screen">
       {/* Hero Banner */}
-      <div className="relative h-[520px] md:h-[600px] overflow-hidden">
-        <img
-          src={featured.image}
-          alt={featured.title}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+      <div 
+        className="relative h-[520px] md:h-[600px] bg-cover bg-center bg-no-repeat bg-fixed overflow-hidden"
+        style={{ backgroundImage: `url(${mothersDayBg})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/70 to-black/30 bg-gradient-to-t from-black/90" />
 
         <div className="absolute inset-0 flex items-center">
           <div className="max-w-7xl mx-auto px-6 w-full">
@@ -57,9 +57,9 @@ export default function HomePage() {
                   More Info
                 </Link>
               </div>
-            </div>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Breadcrumb / venue banner */}
