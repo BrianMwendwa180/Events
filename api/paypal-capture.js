@@ -16,7 +16,14 @@
 import { generateMultipleTicketPages } from './utils/ticket-generator.js';
 import { sendTicketEmail } from './utils/email-service.js';
 
-const PAYPAL_MODE = process.env.PAYPAL_MODE?.toLowerCase() === 'live' ? 'live' : 'sandbox';
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || '';
+const PAYPAL_MODE = process.env.PAYPAL_MODE?.toLowerCase() === 'sandbox'
+  ? 'sandbox'
+  : process.env.PAYPAL_MODE?.toLowerCase() === 'live'
+  ? 'live'
+  : PAYPAL_CLIENT_ID.toLowerCase().startsWith('sb-')
+  ? 'sandbox'
+  : 'live';
 const PAYPAL_API_URL = PAYPAL_MODE === 'live'
   ? 'https://api.paypal.com'
   : 'https://api.sandbox.paypal.com';
