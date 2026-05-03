@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import axios from 'axios';
 import {
   PayPalButtons,
   usePayPalScriptReducer,
@@ -8,11 +9,20 @@ import {
 import {
   ChevronLeft, Lock, CreditCard, CheckCircle, AlertCircle,
   User, Mail, Phone, Loader, ShieldCheck, Ticket, Calendar,
-  Clock, MapPin, ChevronDown, ChevronUp, X,
+  Clock, MapPin, ChevronDown, ChevronUp, X, Download,
 } from 'lucide-react';
 import { useCart } from '../context/useCart';
 
 const CURRENCY = import.meta.env.VITE_CURRENCY || 'USD';
+const API_BASE = import.meta.env.VITE_API_URL || undefined;
+
+// API client. When VITE_API_URL is not configured, we send relative requests to the current origin.
+const apiClient = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 function OrderSummary({
   cart,
@@ -178,11 +188,11 @@ export default function CheckoutPage() {
   } = useCart();
 
   const [step, setStep] = useState(1);        // 1 contact | 2 payment | 3 success
-  const [payMethod, setPayMethod] = useState('paypal');
   const [orderError, setOrderError] = useState('');
   const [isCapturing, setIsCapturing] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);  // mobile summary toggle
   const [orderRef] = useState(() => `FT-${Date.now().toString(36).toUpperCase()}`);
+  const [paymentResult, setPaymentResult] = useState(null);  // Result from backend
 
   const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [contactErrors, setContactErrors] = useState({});
@@ -254,17 +264,44 @@ export default function CheckoutPage() {
     setIsCapturing(true);
     setOrderError('');
     try {
+      // Step 1: Capture order on client
       const details = await actions.order.capture();
       console.info('[PayPal] Captured:', details.id, details.status);
+
+      // Step 2: Send capture details to backend to verify payment and send tickets
+      const response = await apiClient.post('/api/paypal-capture', {
+        orderId: details.id,
+        captureDetails: details,
+        contact,
+        cart,
+        cartTotal,
+        orderRef,
+        paymentMethod: 'PayPal',
+      });
+
+      console.info('[Backend] Payment processed:', response.data);
+
+      // Store payment result for success screen
+      setPaymentResult({
+        orderId: response.data.orderId,
+        orderRef: response.data.orderRef,
+        email: response.data.email,
+        amount: cartTotal,
+        paymentMethod: 'PayPal',
+      });
+
       clearCart();
       setStep(3);
     } catch (err) {
-      console.error('[PayPal] Capture failed:', err);
-      setOrderError('Your payment could not be completed. Please try again or use a different payment method.');
+      console.error('[PayPal] Error:', err);
+      setOrderError(
+        err.response?.data?.details ||
+        'Your payment could not be completed. Please try again or use a different payment method.'
+      );
     } finally {
       setIsCapturing(false);
     }
-  }, [clearCart]);
+  }, [contact, cart, cartTotal, orderRef, clearCart]);
 
   const onError = useCallback((err) => {
     console.error('[PayPal] Error:', err);
@@ -274,6 +311,8 @@ export default function CheckoutPage() {
   const onCancel = useCallback(() => {
     setOrderError('Payment was cancelled. Your cart is still saved — you can try again whenever you\'re ready.');
   }, []);
+
+
 
   /* ── guard: empty cart ── */
   if (cartCount === 0 && step !== 3) {
@@ -301,39 +340,78 @@ export default function CheckoutPage() {
           <h1 className="text-3xl font-bold text-white font-serif mb-2">Order Confirmed!</h1>
           <p className="text-gray-300 mb-1">Thank you, <span className="text-white font-semibold">{contact.firstName || 'valued guest'}</span>!</p>
           <p className="text-gray-500 text-sm mb-6">
-            Tickets sent to <span className="text-white">{contact.email || 'your email'}</span>.
-            <br />Check your inbox for mobile ticket links.
+            Tickets sent to <span className="text-white">{paymentResult?.email || contact.email || 'your email'}</span>.
+            <br />Check your inbox for digital tickets.
           </p>
 
           {/* Order ref */}
-          <div className="bg-gray-800 rounded-xl p-4 mb-5 text-left border border-gray-700">
+          <div className="bg-gray-800 rounded-xl p-4 mb-4 text-left border border-gray-700">
             <div className="text-xs text-gray-500 mb-1 uppercase tracking-wider">Order Reference</div>
-            <div className="text-white font-mono font-bold text-lg tracking-widest">{orderRef}</div>
+            <div className="text-white font-mono font-bold text-lg tracking-widest">{paymentResult?.orderRef || orderRef}</div>
           </div>
+
+          {/* Payment details */}
+          {paymentResult && (
+            <div className="bg-gray-800/50 rounded-xl p-3 mb-4 text-left border border-gray-700">
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Payment Details</div>
+              <div className="text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Method:</span>
+                  <span className="text-white font-medium">{paymentResult.paymentMethod}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Amount:</span>
+                  <span className="text-green-400 font-bold">${paymentResult.amount.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Ticket summary */}
           <div className="bg-gray-800/50 rounded-xl p-4 mb-6 text-left space-y-2 border border-gray-700">
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Your Tickets</div>
-            {cart.map(item => (
-              <div key={`${item.eventId}-${item.categoryId}`} className="flex justify-between text-sm">
-                <div>
-                  <div className="text-white font-medium">{item.quantity}× {item.categoryName}</div>
-                  <div className="text-xs text-gray-500">{item.eventTitle}</div>
-                  <div className="text-xs text-gray-600">{item.eventDate} · {item.eventTime}</div>
+            {cart.length > 0 ? (
+              <>
+                {cart.map(item => (
+                  <div key={`${item.eventId}-${item.categoryId}`} className="flex justify-between text-sm">
+                    <div>
+                      <div className="text-white font-medium">{item.quantity}× {item.categoryName}</div>
+                      <div className="text-xs text-gray-500">{item.eventTitle}</div>
+                      <div className="text-xs text-gray-600">{item.eventDate} · {item.eventTime}</div>
+                    </div>
+                    <span className="text-white font-semibold">${(item.total * item.quantity).toFixed(2)}</span>
+                  </div>
+                ))}
+                <div className="border-t border-gray-700 pt-2 flex justify-between font-bold text-white text-sm">
+                  <span>Total Paid</span>
+                  <span>${cartTotal.toFixed(2)}</span>
                 </div>
-                <span className="text-white font-semibold">${(item.total * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
-            <div className="border-t border-gray-700 pt-2 flex justify-between font-bold text-white text-sm">
-              <span>Total Paid</span>
-              <span>${cartTotal.toFixed(2)}</span>
-            </div>
+              </>
+            ) : (
+              <p className="text-gray-400 text-sm">Your cart items will appear here</p>
+            )}
+          </div>
+
+          {/* Next steps */}
+          <div className="bg-blue-950/30 border border-blue-900/40 rounded-xl p-3 mb-6 text-left">
+            <div className="text-xs text-blue-300 font-semibold mb-2">📧 Check Your Email</div>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Your digital tickets have been sent to your email address. Download the PDF and save it to your device for easy access at the venue.
+            </p>
           </div>
 
           <div className="space-y-2">
             <Link to="/" className="block btn-primary text-center">Browse More Events</Link>
-            <button className="w-full border border-gray-700 hover:border-gray-500 text-gray-300 hover:text-white py-2.5 rounded text-sm font-semibold transition-colors">
-              Download / Print Tickets
+            <button 
+              onClick={() => {
+                // Simulate downloading tickets - in production, this would come from the backend
+                const message = `Your tickets have been sent to ${paymentResult?.email || contact.email}. Please check your email to download them.`;
+                alert(message);
+              }}
+              className="w-full border border-gray-700 hover:border-gray-600 hover:bg-gray-800 text-gray-300 hover:text-white py-2.5 rounded text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            >
+              <Download size={14} />
+              View Email Instructions
             </button>
           </div>
         </div>
@@ -553,42 +631,7 @@ export default function CheckoutPage() {
                   </h2>
                 </div>
                 <div className="p-6">
-                  {/* Tab selector */}
-                  <div className="grid grid-cols-2 gap-3 mb-6">
-                    <button
-                      onClick={() => { setPayMethod('paypal'); setOrderError(''); }}
-                      className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border-2 transition-all duration-150 ${
-                        payMethod === 'paypal'
-                          ? 'border-[#0070BA] bg-blue-950/30 shadow-lg shadow-blue-950/30'
-                          : 'border-gray-700 hover:border-gray-600 bg-gray-800/30'
-                      }`}
-                    >
-                      <img
-                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/124px-PayPal.svg.png"
-                        alt="PayPal"
-                        className="h-5"
-                      />
-                      <span className={`text-sm font-semibold ${payMethod === 'paypal' ? 'text-white' : 'text-gray-400'}`}>
-                        PayPal
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => { setPayMethod('card'); setOrderError(''); }}
-                      className={`flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl border-2 transition-all duration-150 ${
-                        payMethod === 'card'
-                          ? 'border-red-600 bg-red-950/20 shadow-lg shadow-red-950/30'
-                          : 'border-gray-700 hover:border-gray-600 bg-gray-800/30'
-                      }`}
-                    >
-                      <CreditCard size={18} className={payMethod === 'card' ? 'text-red-400' : 'text-gray-500'} />
-                      <span className={`text-sm font-semibold ${payMethod === 'card' ? 'text-white' : 'text-gray-400'}`}>
-                        Card
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* ── PayPal panel ── */}
-                  {payMethod === 'paypal' && (
+                  {/* ── PayPal payment section ── */}
                     <div>
                       {/* Amount badge */}
                       <div className="flex items-center justify-between mb-4 p-3 bg-gray-800 rounded-lg">
@@ -638,84 +681,6 @@ export default function CheckoutPage() {
                         <span>Buyer Protection included with every PayPal transaction</span>
                       </div>
                     </div>
-                  )}
-
-                  {/* ── Card panel ── */}
-                  {payMethod === 'card' && (
-                    <div className="space-y-4">
-                      {/* Amount badge */}
-                      <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                        <span className="text-gray-400 text-sm">Amount due</span>
-                        <span className="text-white font-bold text-lg">${cartTotal.toFixed(2)}</span>
-                      </div>
-
-                      <div>
-                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Card Number</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="1234  5678  9012  3456"
-                            maxLength={19}
-                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 pr-16 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
-                          />
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
-                            {['V', 'M', 'A'].map(c => (
-                              <span key={c} className="text-[10px] font-bold w-5 h-4 flex items-center justify-center bg-gray-700 rounded text-gray-400">{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Expiry Date</label>
-                          <input
-                            type="text"
-                            placeholder="MM / YY"
-                            maxLength={7}
-                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">CVV / CVC</label>
-                          <input
-                            type="text"
-                            placeholder="•••"
-                            maxLength={4}
-                            className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs text-gray-400 font-semibold uppercase tracking-wide block mb-1.5">Name on Card</label>
-                        <input
-                          type="text"
-                          placeholder={`${contact.firstName} ${contact.lastName}`.trim() || 'John Smith'}
-                          className="w-full bg-gray-800 border border-gray-700 hover:border-gray-600 text-white placeholder-gray-600 text-sm rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-red-600/50 transition-all"
-                        />
-                      </div>
-
-                      {orderError && (
-                        <div className="p-3.5 bg-red-950/30 border border-red-800 rounded-xl flex items-start gap-2.5 text-sm text-red-300">
-                          <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                          <span className="flex-1">{orderError}</span>
-                          <button onClick={() => setOrderError('')}><X size={14} className="text-red-500" /></button>
-                        </div>
-                      )}
-
-                      <button
-                        onClick={() => { clearCart(); setStep(3); }}
-                        className="w-full btn-primary py-3.5 text-base flex items-center justify-center gap-2"
-                      >
-                        <Lock size={15} />
-                        Pay ${cartTotal.toFixed(2)} Securely
-                      </button>
-                      <p className="text-xs text-gray-600 text-center">
-                        Card payments processed securely. Demo mode — no real charge.
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
 
