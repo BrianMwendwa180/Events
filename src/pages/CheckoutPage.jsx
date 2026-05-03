@@ -681,8 +681,8 @@ export default function CheckoutPage() {
                         <span>Buyer Protection included with every PayPal transaction</span>
                       </div>
                     </div>
+                  </div>
                 </div>
-              </div>
 
               {/* Trust badges */}
               <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">

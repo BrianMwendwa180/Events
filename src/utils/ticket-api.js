@@ -27,7 +27,7 @@ export async function capturePayPalPayment(payload) {
  * @returns {string} Download URL or confirmation message
  */
 export function handleTicketDownload(ticketData) {
-  const { email, orderRef, eventTitle } = ticketData;
+  const { email } = ticketData;
   
   // In a real app, this would trigger an actual PDF generation
   // For now, we show a helpful message

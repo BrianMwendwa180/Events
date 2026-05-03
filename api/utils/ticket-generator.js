@@ -65,7 +65,6 @@ export function generateTicketPDF(ticketData) {
       .moveDown(0.6);
 
     // Event details grid
-    const detailsY = doc.y;
     doc
       .fontSize(10)
       .fillColor('#666')
