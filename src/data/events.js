@@ -5,7 +5,7 @@ export const events = [
     id: "MDL",
     title: "Xscape: The Mother's Day Love Affair",
     subtitle: "A Special Mother's Day Concert",
-    date: "Saturday, May 10, 2026",
+    date: "Sunday, May 10, 2026",
     time: "8:00 PM",
     doorsOpen: "7:00 PM",
     venue: "Fox Theatre",
